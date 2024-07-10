@@ -4,7 +4,25 @@ const net = require("net");
 console.log("Logs from your program will appear here!");
 
 // the allowed paths in regex
-const allowedPaths = ["^\\/$", "^\\/echo\\/(.*)$"];
+const routeHandlers = {
+    "^\\/$": (socket) => {
+        socket.write("HTTP/1.1 200 OK\r\n\r\n");
+        socket.end();
+    },
+    "^\\/echo\\/(.*)$": (socket, content) => {
+        const contentType = "text/plain";
+        const contentLength = Buffer.byteLength(content, "utf-8");
+        socket.write(`HTTP/1.1 200 OK\r\nContent-Type: ${contentType}\r\nContent-Length: ${contentLength}\r\n\r\n${content}`);
+        socket.end();
+    },
+    "^\\/user-agent$": (socket, headers) => {
+        const userAgent = headers["User-Agent"];
+        const contentType = "text/plain";
+        const contentLength = Buffer.byteLength(userAgent, "utf-8");
+        socket.write(`HTTP/1.1 200 OK\r\nContent-Type: ${contentType}\r\nContent-Length: ${contentLength}\r\n\r\n${userAgent}`);
+        socket.end();
+    },
+};
 
 // Uncomment this to pass the first stage
 const server = net.createServer((socket) => {
@@ -13,31 +31,32 @@ const server = net.createServer((socket) => {
         const request = data.toString();
         const lines = request.split("\r\n");
         const [method, path, protocol] = lines[0].split(" ");
-        console.log("Path:", path);
 
-        // check if the path is allowed
-        if (!allowedPaths.some(p => new RegExp(p).test(path))) {
+        const headers = {};
+        for (let i = 1; i < lines.length - 2; i++) {
+            const [key, value] = lines[i].split(": ");
+            headers[key] = value;
+        }
+        
+        console.log("Path:", path);
+        console.log("Headers:", headers);
+
+        // execute the proper handler
+        let handlerFound = false;
+        for (const [pattern, handler] of Object.entries(routeHandlers)) {
+            const match = path.match(new RegExp(pattern));
+            if (match) {
+            handler(socket, ...match.slice(1), headers);
+            handlerFound = true;
+            break;
+            }
+        }
+        
+        // if no handler found, return 404
+        if (!handlerFound) {
             socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
             socket.end();
-            return;
         }
-            
-        // check if the path is echo
-        const echoMatch = path.match(new RegExp(allowedPaths[1]));
-        if (echoMatch) {
-
-            const content = echoMatch[1];
-            const contentType = "text/plain";
-            const contentLength = Buffer.byteLength(content, "utf-8");
-            socket.write(`HTTP/1.1 200 OK\r\nContent-Type: ${contentType}\r\nContent-Length: ${contentLength}\r\n\r\n${content}`);
-            
-            socket.end();
-            return;
-        }
-
-        socket.write("HTTP/1.1 200 OK\r\n\r\n");
-        socket.end();
-        
     });
 
     socket.on("close", () => {
