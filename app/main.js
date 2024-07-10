@@ -1,4 +1,6 @@
 const net = require("net");
+const fs = require("fs");
+const path = require("path");
 
 // You can use print statements as follows for debugging, they'll be visible when running tests.
 console.log("Logs from your program will appear here!");
@@ -21,6 +23,21 @@ const routeHandlers = {
         const contentLength = Buffer.byteLength(userAgent, "utf-8");
         socket.write(`HTTP/1.1 200 OK\r\nContent-Type: ${contentType}\r\nContent-Length: ${contentLength}\r\n\r\n${userAgent}`);
         socket.end();
+    },
+    "^\\/files\\/(.*)$": (socket, filename) => {
+    
+        // we return the file requested by the client from the files directory
+        const filePath = path.join(__dirname, "files", filename);
+        if (fs.existsSync(filePath)) {
+            const contentType = "text/plain";
+            const content = fs.readFileSync(filePath);
+            const contentLength = Buffer.byteLength(content, "utf-8");
+            socket.write(`HTTP/1.1 200 OK\r\nContent-Type: ${contentType}\r\nContent-Length: ${contentLength}\r\n\r\n${content}`);
+        } else {
+            socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
+        }
+        socket.end();
+
     },
 };
 
