@@ -24,23 +24,50 @@ const routeHandlers = {
         socket.write(`HTTP/1.1 200 OK\r\nContent-Type: ${contentType}\r\nContent-Length: ${contentLength}\r\n\r\n${userAgent}`);
         socket.end();
     },
-    "^\\/files\\/(.*)$": (socket, filename) => {
+    "^\\/files\\/(.*)$": (socket, filename, headers, requestBody, method) => {
     
+        console.log("requestBody:", requestBody);
+
         const directory = process.argv[3];
         const filePath = path.join(directory, filename);
-        console.log("File Path:", filePath);
-        if (fs.existsSync(filePath)) {
-            const contentType = "application/octet-stream";
-            const content = fs.readFileSync(filePath);
-            const contentLength = Buffer.byteLength(content, "utf-8");
-            socket.write(`HTTP/1.1 200 OK\r\nContent-Type: ${contentType}\r\nContent-Length: ${contentLength}\r\n\r\n${content}`);
-        } else {
-            socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
-        }
-        socket.end();
 
+        // if method is POST, write the content to the file
+        if (method === "POST") {
+            fs.writeFileSync(filePath, requestBody);
+            socket.write("HTTP/1.1 201 CREATED\r\n\r\n");
+        } else {
+            if (fs.existsSync(filePath)) {
+                const contentType = "application/octet-stream";
+                const content = fs.readFileSync(filePath);
+                const contentLength = Buffer.byteLength(content, "utf-8");
+                socket.write(`HTTP/1.1 200 OK\r\nContent-Type: ${contentType}\r\nContent-Length: ${contentLength}\r\n\r\n${content}`);
+            } else {
+                socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
+            }
+        }
+        
+        socket.end();
     },
 };
+
+const executeHandler = (socket, path, headers, requestBody = "", method) => {
+    let handlerFound = false;
+    for (const [pattern, handler] of Object.entries(routeHandlers)) {
+        const match = path.match(new RegExp(pattern));
+        if (match) {
+            handler(socket, ...match.slice(1), headers, requestBody, method);
+            handlerFound = true;
+            break;
+        }
+    }
+
+    // if no handler found, return 404
+    if (!handlerFound) {
+        socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
+        socket.end();
+    }
+};
+
 
 // Uncomment this to pass the first stage
 const server = net.createServer((socket) => {
@@ -59,22 +86,12 @@ const server = net.createServer((socket) => {
         console.log("Path:", path);
         console.log("Headers:", headers);
 
-        // execute the proper handler
-        let handlerFound = false;
-        for (const [pattern, handler] of Object.entries(routeHandlers)) {
-            const match = path.match(new RegExp(pattern));
-            if (match) {
-            handler(socket, ...match.slice(1), headers);
-            handlerFound = true;
-            break;
-            }
+        let requestBody = ""
+        if (method === "POST") {
+            requestBody = lines[lines.length - 1];
         }
-        
-        // if no handler found, return 404
-        if (!handlerFound) {
-            socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
-            socket.end();
-        }
+
+        executeHandler(socket, path, headers, requestBody, method);
     });
 
     socket.on("close", () => {
