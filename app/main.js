@@ -25,7 +25,12 @@ const server = net.createServer((socket) => {
         // check if the path is echo
         const echoMatch = path.match(new RegExp(allowedPaths[1]));
         if (echoMatch) {
-            socket.write(`HTTP/1.1 200 OK\r\n\r\n${echoMatch[1]}`);
+
+            const content = echoMatch[1];
+            const contentType = "text/plain";
+            const contentLength = Buffer.byteLength(content, "utf-8");
+            socket.write(`HTTP/1.1 200 OK\r\nContent-Type: ${contentType}\r\nContent-Length: ${contentLength}\r\n\r\n${content}`);
+            
             socket.end();
             return;
         }
