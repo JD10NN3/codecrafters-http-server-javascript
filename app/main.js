@@ -125,12 +125,17 @@ const server = net.createServer((socket) => {
         }
 
         // execute the handler for the path
-        const response = executeHandler(path, headers, requestBody, method);
+        let response = executeHandler(path, headers, requestBody, method);
         socket.write(`HTTP/1.1 ${response.statusCode} ${statusMessages[response.statusCode]}\r\n`);
         
         // check if the client accepts a specific encoding and add the headers
         if (headers["Accept-Encoding"] && headers["Accept-Encoding"].includes("gzip")) {
             response.headers["Content-Encoding"] = "gzip";
+            
+            // compress the body
+            const zlib = require("zlib");
+            response.body = zlib.gzipSync(response.body);
+            response.headers["Content-Length"] = response.body.length;
         }
         
         // compose the headers
