@@ -30,7 +30,7 @@ const routeHandlers = {
         const filePath = path.join(directory, filename);
         console.log("File Path:", filePath);
         if (fs.existsSync(filePath)) {
-            const contentType = "text/plain";
+            const contentType = "application/octet-stream";
             const content = fs.readFileSync(filePath);
             const contentLength = Buffer.byteLength(content, "utf-8");
             socket.write(`HTTP/1.1 200 OK\r\nContent-Type: ${contentType}\r\nContent-Length: ${contentLength}\r\n\r\n${content}`);
