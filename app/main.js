@@ -27,7 +27,7 @@ const routeHandlers = {
     "^\\/files\\/(.*)$": (socket, filename) => {
     
         // we return the file requested by the client from the files directory
-        const filePath = path.join(__dirname, "files", filename);
+        const filePath = path.join(__dirname, filename);
         if (fs.existsSync(filePath)) {
             const contentType = "text/plain";
             const content = fs.readFileSync(filePath);
