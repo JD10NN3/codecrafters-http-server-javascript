@@ -34,7 +34,7 @@ const routeHandlers = {
         // if method is POST, write the content to the file
         if (method === "POST") {
             fs.writeFileSync(filePath, requestBody);
-            socket.write("HTTP/1.1 201 CREATED\r\n\r\n");
+            socket.write("HTTP/1.1 201 Created\r\n\r\n");
         } else {
             if (fs.existsSync(filePath)) {
                 const contentType = "application/octet-stream";
