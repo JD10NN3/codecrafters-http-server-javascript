@@ -129,7 +129,7 @@ const server = net.createServer((socket) => {
         socket.write(`HTTP/1.1 ${response.statusCode} ${statusMessages[response.statusCode]}\r\n`);
         
         // check if the client accepts a specific encoding and add the headers
-        if (headers["Accept-Encoding"] === "gzip") {
+        if (headers["Accept-Encoding"] && headers["Accept-Encoding"].includes("gzip")) {
             response.headers["Content-Encoding"] = "gzip";
         }
         
