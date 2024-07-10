@@ -5,28 +5,52 @@ const path = require("path");
 // You can use print statements as follows for debugging, they'll be visible when running tests.
 console.log("Logs from your program will appear here!");
 
+const statusMessages = {
+    200: "OK",
+    201: "Created",
+    404: "Not Found"
+};
+
 // the allowed paths in regex
 const routeHandlers = {
-    "^\\/$": (socket) => {
-        socket.write("HTTP/1.1 200 OK\r\n\r\n");
-        socket.end();
+    "^\\/$": () => {
+        return {
+            statusCode: 200,
+            headers: {},
+            body: ""
+        };
     },
-    "^\\/echo\\/(.*)$": (socket, content) => {
+    "^\\/echo\\/(.*)$": (content) => {
         const contentType = "text/plain";
         const contentLength = Buffer.byteLength(content, "utf-8");
-        socket.write(`HTTP/1.1 200 OK\r\nContent-Type: ${contentType}\r\nContent-Length: ${contentLength}\r\n\r\n${content}`);
-        socket.end();
+        return {
+            statusCode: 200,
+            headers: {
+            "Content-Type": contentType,
+            "Content-Length": contentLength
+            },
+            body: content
+        };
     },
-    "^\\/user-agent$": (socket, headers) => {
+    "^\\/user-agent$": (headers) => {
         const userAgent = headers["User-Agent"];
         const contentType = "text/plain";
         const contentLength = Buffer.byteLength(userAgent, "utf-8");
-        socket.write(`HTTP/1.1 200 OK\r\nContent-Type: ${contentType}\r\nContent-Length: ${contentLength}\r\n\r\n${userAgent}`);
-        socket.end();
+        return {
+            statusCode: 200,
+            headers: {
+                "Content-Type": contentType,
+                "Content-Length": contentLength
+            },
+            body: userAgent
+        };
     },
-    "^\\/files\\/(.*)$": (socket, filename, headers, requestBody, method) => {
-    
-        console.log("requestBody:", requestBody);
+    "^\\/files\\/(.*)$": (filename, headers, requestBody, method) => {
+        const response = {
+            statusCode: 200,
+            headers: {},
+            body: ""
+        };
 
         const directory = process.argv[3];
         const filePath = path.join(directory, filename);
@@ -34,28 +58,33 @@ const routeHandlers = {
         // if method is POST, write the content to the file
         if (method === "POST") {
             fs.writeFileSync(filePath, requestBody);
-            socket.write("HTTP/1.1 201 Created\r\n\r\n");
+            response.statusCode = 201;
         } else {
             if (fs.existsSync(filePath)) {
                 const contentType = "application/octet-stream";
                 const content = fs.readFileSync(filePath);
                 const contentLength = Buffer.byteLength(content, "utf-8");
-                socket.write(`HTTP/1.1 200 OK\r\nContent-Type: ${contentType}\r\nContent-Length: ${contentLength}\r\n\r\n${content}`);
+                response.headers = {
+                    "Content-Type": contentType,
+                    "Content-Length": contentLength
+                };
+                response.body = content;
             } else {
-                socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
+                response.statusCode = 404;
             }
         }
         
-        socket.end();
+        return response;
     },
 };
 
-const executeHandler = (socket, path, headers, requestBody = "", method) => {
+const executeHandler = (path, headers, requestBody = "", method) => {
     let handlerFound = false;
+    let response = null;
     for (const [pattern, handler] of Object.entries(routeHandlers)) {
         const match = path.match(new RegExp(pattern));
         if (match) {
-            handler(socket, ...match.slice(1), headers, requestBody, method);
+            response = handler(...match.slice(1), headers, requestBody, method);
             handlerFound = true;
             break;
         }
@@ -63,11 +92,15 @@ const executeHandler = (socket, path, headers, requestBody = "", method) => {
 
     // if no handler found, return 404
     if (!handlerFound) {
-        socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
-        socket.end();
+        response = {
+            statusCode: 404,
+            headers: {},
+            body: ""
+        };
     }
-};
 
+    return response;
+};
 
 // Uncomment this to pass the first stage
 const server = net.createServer((socket) => {
@@ -91,7 +124,25 @@ const server = net.createServer((socket) => {
             requestBody = lines[lines.length - 1];
         }
 
-        executeHandler(socket, path, headers, requestBody, method);
+        // execute the handler for the path
+        const response = executeHandler(path, headers, requestBody, method);
+        socket.write(`HTTP/1.1 ${response.statusCode} ${statusMessages[response.statusCode]}\r\n`);
+        
+        // check if the client accepts a specific encoding and add the headers
+        if (headers["Accept-Encoding"] === "gzip") {
+            response.headers["Content-Encoding"] = "gzip";
+        }
+        
+        // compose the headers
+        for (const [key, value] of Object.entries(response.headers)) {
+            socket.write(`${key}: ${value}\r\n`);
+        }
+
+        // write the body and close the connection
+        socket.write("\r\n");
+        socket.write(response.body);
+        socket.end();
+
     });
 
     socket.on("close", () => {
